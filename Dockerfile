@@ -100,6 +100,5 @@ ENV PATH="/app/.venv/bin:$PATH" \
     BROWSER_PATH=/usr/bin/chromium \
     CHROME_BIN=/usr/bin/chromium
 # --------------------------------------------------------------------------- #
-USER appuser
 EXPOSE 5000
 CMD ["/app/start.sh"]
