@@ -8,6 +8,7 @@ import jwt
 from flask import Blueprint, jsonify, make_response, redirect, request, session, url_for
 from flask import current_app as app
 
+from broker.zerodha.api.auto_login_service import execute_auto_login
 from limiter import limiter  # Import the limiter instance
 from utils.auth_utils import handle_auth_failure, handle_auth_success
 from utils.config import (
@@ -32,6 +33,22 @@ brlogin_bp = Blueprint("brlogin", __name__, url_prefix="/")
 @brlogin_bp.errorhandler(429)
 def ratelimit_handler(e):
     return jsonify(error="Rate limit exceeded"), 429
+
+
+@brlogin_bp.route("/auth/broker/zerodha-auto-login", methods=["POST"])
+@limiter.limit(LOGIN_RATE_LIMIT_MIN)
+@limiter.limit(LOGIN_RATE_LIMIT_HOUR)
+def zerodha_auto_login():
+    """Perform one authorized, audited scheduled Zerodha login."""
+    payload, status = execute_auto_login()
+    return jsonify(payload), status
+
+
+@brlogin_bp.record_once
+def _exempt_zerodha_auto_login_csrf(state):
+    csrf = getattr(state.app, "csrf", None)
+    if csrf is not None:
+        csrf.exempt(state.app.view_functions["brlogin.zerodha_auto_login"])
 
 
 @brlogin_bp.route("/<broker>/callback", methods=["POST", "GET"])

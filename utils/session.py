@@ -5,9 +5,14 @@ from functools import wraps
 import pytz
 from flask import redirect, session, url_for
 
+from utils.keyed_locks import KeyedLocks
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+# One process-local boundary for freshness checks, session registration and
+# token mutation. Production uses one web worker; keep those operations together.
+broker_auth_locks = KeyedLocks(reentrant=True, name="broker authentication")
 
 
 def is_session_expiry_disabled():
@@ -175,6 +180,12 @@ def has_login_this_trading_session(username) -> bool:
 
 
 def revoke_user_tokens(revoke_db_tokens=True):
+    """Serialize stale-session revocation with broker authentication."""
+    with broker_auth_locks.hold(session.get("user")):
+        return _revoke_user_tokens(revoke_db_tokens)
+
+
+def _revoke_user_tokens(revoke_db_tokens=True):
     """
     Revoke auth tokens for the current user when session expires.
 

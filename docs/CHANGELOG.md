@@ -8,6 +8,22 @@ fix, live in [docs/releases](releases/).
 
 ## [Unreleased]
 
+### Zerodha scheduled authentication
+
+- Added an opt-in, loopback-only bearer-authenticated Zerodha login endpoint and
+  `scripts/zerodha_auto_login.py` runner. Password/TOTP authentication obtains a
+  request token for the configured Kite app; the account is profile-verified
+  before OpenAlgo stores the encrypted token and refreshes caches and feeds.
+- Added fail-closed, append-only broker-authentication decision records with
+  correlation IDs and code identity; credentials and tokens are never returned.
+- Serialized session registration/token persistence against stale-cookie expiry
+  using existing per-user locks. Daily-revoked rows with cleared broker metadata
+  can authenticate again; active other-broker records remain protected.
+- Zerodha's automated web-login flow is unofficial and may change. This feature
+  does not toggle strategy flags or trading mode, but restoring broker access
+  can let already-enabled strategies submit orders.
+
+
 ## [2.0.2.7] - 2026-10-08
 
 ### gthread Web Server Release

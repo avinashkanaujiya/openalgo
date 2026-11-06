@@ -45,42 +45,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ln -fs /usr/share/zoneinfo/Asia/Kolkata /etc/localtime && \
     dpkg-reconfigure -f noninteractive tzdata && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
-# 1 – user & workdir.
-#     Pin appuser to UID/GID 1000 explicitly. install-docker.sh and
-#     install-docker-multi-custom-ssl.sh chown the host's .env to UID 1000
-#     before bind-mounting it into the container; if the container's
-#     appuser ends up at a different UID (which can happen on ARM64 base
-#     images that already have system users at low UIDs, or if the base
-#     image bumps its useradd defaults), the bind-mounted .env becomes
-#     unwritable to the running process. See marketcalls/openalgo#1394.
-RUN groupadd --gid 1000 appuser && \
-    useradd --create-home --uid 1000 --gid 1000 appuser
 WORKDIR /app
-# 2 – copy the ready-made venv and source with correct ownership
-COPY --from=python-builder --chown=appuser:appuser /app/.venv /app/.venv
-COPY --chown=appuser:appuser . .
-# 3 - copy built frontend from frontend-builder
-COPY --from=frontend-builder --chown=appuser:appuser /app/frontend/dist /app/frontend/dist
-# 4 – create required directories with proper ownership and permissions
-#     Also create empty .env file with write permissions for Railway deployment
-#
-#     NOTE: chown /app itself (not just its contents). WORKDIR creates /app
-#     as root:root mode 755, and that ownership persists even after we
-#     COPY --chown=appuser:appuser into it. Without this chown the running
-#     appuser process can read/execute /app but cannot create new files
-#     there — which breaks any atomic-write helper that needs to put a
-#     temp file in /app (e.g. utils/env_check.py rotating FERNET_SALT in
-#     /app/.env). See marketcalls/openalgo#1394.
+# 2 – copy ready-made venv and application source
+COPY --from=python-builder /app/.venv /app/.venv
+COPY . .
+# 3 – copy built frontend from frontend-builder
+COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
+# 4 – create required directories and restrict secrets
 RUN mkdir -p /app/log /app/log/strategies /app/db /app/tmp /app/tmp/numba_cache /app/tmp/matplotlib /app/strategies /app/strategies/scripts /app/strategies/examples /app/keys && \
-    chown appuser:appuser /app && \
-    chown -R appuser:appuser /app/log /app/db /app/tmp /app/strategies /app/keys && \
     chmod -R 755 /app/strategies /app/log /app/tmp && \
     chmod 700 /app/keys && \
-    touch /app/.env && chown appuser:appuser /app/.env && chmod 666 /app/.env
+    touch /app/.env && chmod 600 /app/.env
 # 5 – entrypoint script and fix line endings
 #     start.sh runs the web server launcher and its helpers when .env asks for
 #     gthread, so they lose any Windows line endings too (bash cannot run them).
-COPY --chown=appuser:appuser start.sh /app/start.sh
+COPY start.sh /app/start.sh
 RUN sed -i 's/\r$//' /app/start.sh /app/install/openalgo-gunicorn.sh \
         /app/install/lib/resolve_runtime.py /app/install/lib/gunicorn_hooks.py && \
     chmod +x /app/start.sh
@@ -104,6 +83,5 @@ ENV PATH="/app/.venv/bin:$PATH" \
     BROWSER_PATH=/usr/bin/chromium \
     CHROME_BIN=/usr/bin/chromium
 # --------------------------------------------------------------------------- #
-USER appuser
 EXPOSE 5000
 CMD ["/app/start.sh"]
